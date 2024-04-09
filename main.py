@@ -4,7 +4,18 @@ from scipy import constants
 from tkinter import ttk
 
 '''
-TODO: 
+TODO:
+Disable real time simulation. Create Run simulation button / keybind.
+
+Implement mesh analysis into simulator
+
+Create test scenarios (use ovals for feet)
+
+get data to fill table from simulations
+
+
+later:
+
 make objects configurable
 make test scenarios
 display numerical CoP values as well as error

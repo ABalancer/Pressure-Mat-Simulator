@@ -130,23 +130,20 @@ class Sensor:
         self._r0 = r0
         self._k = k
 
-    def compute_resistance(self, pressure, loaded_area=0):
-        if loaded_area > 0:
-            resistance = self._r0 * np.exp(-self._k * pressure / (self._sensor_area / loaded_area))
-        else:
-            resistance = self._r0 * np.exp(-self._k * pressure / self._sensor_area)
+    def compute_resistance(self, pressure):
+        resistance = (self._r0 / self._sensor_area) * np.exp(-self._k * pressure)
         return resistance
 
     # Through the potential divider the voltage has a somewhat linear relationship with force up to about 100kN
     # This means these ADC values are an approximation for force and are not always accurate. This is the default.
     # If approximate=False, then the correct force values will be mapped to the 12bit ADC output.
-    def compute_adc_value(self, pressure, loaded_area=0, approximate=True):
-        z1 = self.compute_resistance(pressure, loaded_area)
-        if approximate:
+    def compute_adc_value(self, pressure, approximate=True):
+        z1 = self.compute_resistance(pressure)
+        if approximate:  # uses the potential divider to estimate the force rather than the equation.
             z2 = self._pdr
             voltage = z2/(z1+z2)
             adc_value = round(4095*voltage)
-        else:
+        else:  # returns the real value of the force using the equation.
             force = np.log(z1/80000)/-self._k
             if force > 200000:
                 force = 200000
@@ -183,7 +180,7 @@ class SimulationSetup:
         self._num_rows = rows
         self._num_columns = cols
         self._track_width_mm = track_width
-        self._sensor_area = (track_width / 1000) ** 2
+        self._sensor_area = (track_width / 1000) ** 2  # in metres squared
         self._gap_width_mm = spacing_width
         self._spacing_ratio = spacing_width / track_width
         if self._num_rows > self._num_columns:
@@ -194,8 +191,8 @@ class SimulationSetup:
         self._spacing_width_pixel = self._spacing_ratio * self._track_width_pixel
         self._pixel_ratio = self._track_width_pixel / self._track_width_mm
         self._draw_sensors()
-        self._draw_load(15, 70, 70, 'green')
-        self._draw_load(15, 40, 40, 'blue')
+        self._draw_load(5, 70, 70, 'green')
+        self._draw_load(5, 40, 40, 'blue')
 
     def _draw_sensors(self):
         x = self._spacing_width_pixel / 2
@@ -209,7 +206,7 @@ class SimulationSetup:
                                                                 y + self._track_width_pixel,
                                                                 fill='black', outline='', tags='pressure_sensor')
                 current_sensor = Sensor(sensor_reference,
-                                        sensor_area=self._sensor_area, pdr=10000, r0=80000, k=3.107e-5)
+                                        sensor_area=self._sensor_area, pdr=10000, r0=0.91618, k=1.356e-5)
                 self._sensors.append(current_sensor)
                 x += self._track_width_pixel + self._spacing_width_pixel
             x = self._spacing_width_pixel / 2
@@ -250,7 +247,7 @@ class SimulationSetup:
             pixel_overlap_area = 0
             pressure = 0
         real_overlap_area = pixel_overlap_area/((self._pixel_ratio * 1000) ** 2)
-        adc_result = sensor.compute_adc_value(pressure, real_overlap_area, approximate=approximate)
+        adc_result = sensor.compute_adc_value(pressure, approximate=approximate)
 
         return adc_result
 

@@ -141,15 +141,20 @@ class Sensor:
         self._r0 = r0
         self._k = k
 
-    def compute_resistance(self, pressure):
-        resistance = (self._r0 / self._sensor_area) * np.exp(-self._k * pressure)
+    def compute_resistance(self, pressure, loaded_area):
+        if 0 < loaded_area < self._sensor_area:
+            resistance_loaded = (self._r0 / loaded_area) * np.exp(-self._k * pressure)
+            resistance_unloaded = (self._r0 / (self._sensor_area - loaded_area))
+            resistance = 1/(1/resistance_loaded + 1/resistance_unloaded)
+        else:
+            resistance = (self._r0 / self._sensor_area) * np.exp(-self._k * pressure)
         return resistance
 
     # Through the potential divider the voltage has a somewhat linear relationship with force up to about 100kN
     # This means these ADC values are an approximation for force and are not always accurate. This is the default.
     # If approximate=False, then the correct force values will be mapped to the 12bit ADC output.
-    def compute_adc_value(self, pressure, approximate=True):
-        z1 = self.compute_resistance(pressure)
+    def compute_adc_value(self, pressure, loaded_area=None, approximate=True):
+        z1 = self.compute_resistance(pressure, loaded_area)
         if approximate:  # uses the potential divider to estimate the force rather than the equation.
             z2 = self._pdr
             voltage = z2/(z1+z2)
@@ -258,14 +263,14 @@ class SimulationSetup:
             pixel_overlap_area = 0
             pressure = 0
         real_overlap_area = pixel_overlap_area/((self._pixel_ratio * 1000) ** 2)
-        adc_result = sensor.compute_adc_value(pressure, approximate=approximate)
+        adc_result = sensor.compute_adc_value(pressure, real_overlap_area, approximate=approximate)
 
         return adc_result
 
     def check_sensors(self, approximate=True):
         matrix_adc_results = np.zeros((self._num_rows, self._num_columns), dtype=np.int16)
         adc_results = np.zeros(len(self._loads), dtype=np.int16)
-        no_load = self._sensors[0].compute_adc_value(0, approximate=approximate)
+        no_load = self._sensors[0].compute_adc_value(0, loaded_area=0, approximate=approximate)
         scaling_factor = 4095/(4095 - no_load)
         if matrix_adc_results.size != len(self._sensors):
             exit("Mismatch between number of sensors and matrix size")

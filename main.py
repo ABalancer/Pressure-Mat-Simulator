@@ -5,10 +5,6 @@ from tkinter import ttk
 
 '''
 TODO:
-Disable real time simulation. Create Run simulation button / keybind.
-
-Implement mesh analysis into simulator
-
 Create test scenarios (use ovals for feet)
 
 get data to fill table from simulations

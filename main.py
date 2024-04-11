@@ -103,8 +103,10 @@ class Load:
         self._centre_x = centre_x
         self._centre_y = centre_y
 
-    def update_load(self, mass, area):
+    def update_load_mass(self, mass):
         self._mass = mass
+
+    def update_load_area(self, area):
         self._area = area
 
     def get_location(self):
@@ -188,7 +190,7 @@ class SimulationSetup:
 
     def update_mat_parameters(self, rows, cols, track_width, spacing_width):
         self._clear_sensors()
-        self._clear_loads()
+        self.clear_loads()
         self._num_rows = rows
         self._num_columns = cols
         self._track_width_mm = track_width
@@ -203,8 +205,8 @@ class SimulationSetup:
         self._spacing_width_pixel = self._spacing_ratio * self._track_width_pixel
         self._pixel_ratio = self._track_width_pixel / self._track_width_mm
         self._draw_sensors()
-        self._draw_load(5, 70, 70, 'green')
-        self._draw_load(5, 40, 40, 'blue')
+        self.draw_load(5, 70, 70, 'green')
+        self.draw_load(5, 40, 40, 'blue')
 
     def _draw_sensors(self):
         x = self._spacing_width_pixel / 2
@@ -224,16 +226,18 @@ class SimulationSetup:
             x = self._spacing_width_pixel / 2
             y += self._track_width_pixel + self._spacing_width_pixel
 
-    def _draw_load(self, weight, width, height, colour):  # kg, mm, mm
+    def draw_load(self, weight, width, height, colour, x=0, y=0, drag=True):  # kg, mm, mm, canvas x pos, canvas y pos
         pixel_width = round(self._pixel_ratio * width)
         pixel_height = round(self._pixel_ratio * height)
-        load_reference = self.canvas.create_rectangle(0, 0, pixel_width, pixel_height,
+        load_reference = self.canvas.create_rectangle(x, y, x + pixel_width, y + pixel_height,
                                                       outline='', fill=colour, tags='load')
+        # update this to fix real cop
         load = Load(load_reference,
                     centre_x=width/2, centre_y=height/2,
                     mass=weight, area=width * height / 1000000)
-        self.canvas.tag_bind(load_reference, '<Button-1>', self._on_drag_start)
-        self.canvas.tag_bind(load_reference, '<B1-Motion>', self._on_drag_motion)
+        if drag is True:
+            self.canvas.tag_bind(load_reference, '<Button-1>', self._on_drag_start)
+            self.canvas.tag_bind(load_reference, '<B1-Motion>', self._on_drag_motion)
         self._loads.append(load)
 
     # Checks if the loads and sensors overlap. If they do, computes and returns the pressure reading.
@@ -278,7 +282,10 @@ class SimulationSetup:
                                                                          self._loads[load_number],
                                                                          approximate=approximate)
                 sensor += 1
-                rescaled_adc_result = max(adc_results) - no_load
+                if adc_results.any():
+                    rescaled_adc_result = max(adc_results) - no_load
+                else:
+                    rescaled_adc_result = 0
                 if rescaled_adc_result < 0:
                     rescaled_adc_result = 0
                 matrix_adc_results[row][col] = scaling_factor * rescaled_adc_result
@@ -286,6 +293,9 @@ class SimulationSetup:
 
     def get_loads(self):
         return self._loads
+
+    def update_load_mass(self, index, mass):
+        self._loads[index].update_load_mass(mass)
 
     def get_pixel_ratio(self):
         return self._pixel_ratio
@@ -316,7 +326,7 @@ class SimulationSetup:
         self.canvas.delete('pressure_sensor')  # Clear previous tracks
         self._sensors = []
 
-    def _clear_loads(self):
+    def clear_loads(self):
         self.canvas.delete('load')
         self._loads = []
 
@@ -523,7 +533,7 @@ class App:
         # Row 3
         # Frame for Pressure Mat Design Configuration
         frame_configurations = create_widget(self.root, tk.Frame)
-        frame_configurations.grid(row=3, column=0, rowspan=2, columnspan=1, sticky="ew")
+        frame_configurations.grid(row=3, column=0, rowspan=2, columnspan=1, sticky="NSEW")
         frame_pressure_mat = create_widget(frame_configurations, tk.Frame)
         frame_pressure_mat.grid(row=0, column=0)
 
@@ -552,9 +562,9 @@ class App:
         self.update_mat_button = create_widget(frame_pressure_mat, tk.Button, text="Update Mat Design",
                                                command=self._update_mat).grid(row=5, columnspan=2, pady=5)
 
-        # Frame for Pressure Mat settings
+        # Frame for Pressure Mat load settings
         frame_load_config = create_widget(frame_configurations, tk.Frame)
-        frame_load_config.grid(row=0, column=1)
+        frame_load_config.grid(row=0, column=1, sticky="NSEW")
 
         create_widget(frame_load_config, tk.Label, text="Load Configuration", pady=10).grid(row=0, columnspan=2)
         '''
@@ -576,6 +586,13 @@ class App:
         '''
         self.update_load_button = create_widget(frame_load_config, tk.Button, text="Update Load",
                                                 command=self._update_load).grid(row=5, columnspan=2, pady=5)
+        # Frame for test scenarios
+        frame_test_scenarios = create_widget(frame_configurations, tk.Frame)
+        frame_test_scenarios.grid(row=0, column=2, sticky="NSEW")
+
+        create_widget(frame_test_scenarios, tk.Label, text="Test Scenarios", pady=10).grid(row=0, columnspan=2)
+        self.update_mat_button = create_widget(frame_test_scenarios, tk.Button, text="Weight Shifting",
+                                               command=self._side_weight_shift).grid(row=1, columnspan=2, pady=5)
 
         # Centre of Pressure Readouts
         cop_readouts = create_widget(self.root, tk.Frame)
@@ -616,6 +633,33 @@ class App:
             self.setup_grid.update_mat_parameters(rows=int(row_number), cols=int(col_number),
                                                   track_width=int(track_width), spacing_width=int(spacing_width))
             self.results_grid.update_matrix_parameters(row=int(row_number), col=int(col_number))
+
+    def _side_weight_shift(self):
+        self.setup_grid.clear_loads()
+        foot_height = 250  # mm
+        foot_width = 105  # mm
+        canvas_width = self.setup_grid.canvas_width  # pixels
+        canvas_height = self.setup_grid.canvas_height  # pixels
+        pixel_ratio = self.setup_grid.get_pixel_ratio()
+        foot_height_pixels = foot_height * pixel_ratio
+        foot_width_pixels = foot_width * pixel_ratio
+        y1 = round((canvas_height - foot_height_pixels)/2)
+        x1 = y1
+        y2 = y1
+        x2 = canvas_width - foot_width_pixels - x1
+        self.setup_grid.draw_load(weight=35, width=105, height=250, colour="yellow", x=x1, y=y1, drag=False)
+        self.setup_grid.draw_load(weight=35, width=105, height=250, colour="yellow", x=x2, y=y2, drag=False)
+        self.root.after(100, self._update_scenario, 0)
+
+    def _update_scenario(self, time):
+        print("todo")
+        left_foot_weight = 70 * np.square((np.sin(2 * np.pi * time / 1000)))
+        right_foot_weight = 70 * np.square((np.cos(2 * np.pi * time / 1000)))
+        time += 10
+        self.setup_grid.update_load_mass(0, left_foot_weight)
+        self.setup_grid.update_load_mass(1, right_foot_weight)
+        self.root.after(100, self._update_scenario, time)
+
 
     def _update_load(self):
         print("TODO")

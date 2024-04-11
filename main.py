@@ -27,7 +27,10 @@ GRID_WIDTH = 500
 TRACK_WIDTH = 10
 PITCH_WIDTH = 10
 
-APPROXIMATE_FORCE = False
+R0 = 0.91618
+K = 1.356e-5
+
+APPROXIMATE_FORCE = True
 
 colour_interpolation_values = [
     (13, 22, 135), (45, 25, 148), (66, 29, 158), (90, 32, 165), (112, 34, 168),
@@ -126,11 +129,11 @@ class Load:
 
 
 class Sensor:
-    def __init__(self, reference, sensor_area, pdr, r0, k):
+    def __init__(self, reference, sensor_area, r0, k):
         self.reference = reference
         self._sensor_area = sensor_area
-        self._pdr = pdr
         self._r0 = r0
+        self._pdr = self._r0 / (self._sensor_area * 5)
         self._k = k
 
     def update_sensor(self, sensor_area, pdr, r0, k):
@@ -155,13 +158,13 @@ class Sensor:
         z1 = self.compute_resistance(pressure, loaded_area)
         if approximate:  # uses the potential divider to estimate the force rather than the equation.
             z2 = self._pdr
-            voltage = z2/(z1+z2)
-            adc_value = round(4095*voltage)
+            voltage = z2 / (z1 + z2)
+            adc_value = round(4095 * voltage)
         else:  # returns the real value of the force using the equation.
-            force = np.log(z1/80000)/-self._k
+            force = np.log(z1/(self._r0 / self._sensor_area))/-self._k
             if force > 200000:
                 force = 200000
-            adc_value = round(4095*force/200000)
+            adc_value = round(4095 * force / 200000)
         return adc_value
 
 
@@ -205,8 +208,8 @@ class SimulationSetup:
         self._spacing_width_pixel = self._spacing_ratio * self._track_width_pixel
         self._pixel_ratio = self._track_width_pixel / self._track_width_mm
         self._draw_sensors()
-        self.draw_load(5, 70, 70, 'green')
-        self.draw_load(5, 40, 40, 'blue')
+        self.draw_load(20, 70, 70, 'green')
+        self.draw_load(20, 40, 40, 'blue')
 
     def _draw_sensors(self):
         x = self._spacing_width_pixel / 2
@@ -220,7 +223,7 @@ class SimulationSetup:
                                                                 y + self._track_width_pixel,
                                                                 fill='black', outline='', tags='pressure_sensor')
                 current_sensor = Sensor(sensor_reference,
-                                        sensor_area=self._sensor_area, pdr=10000, r0=0.91618, k=1.356e-5)
+                                        sensor_area=self._sensor_area, r0=R0, k=K)
                 self._sensors.append(current_sensor)
                 x += self._track_width_pixel + self._spacing_width_pixel
             x = self._spacing_width_pixel / 2
@@ -652,14 +655,12 @@ class App:
         self.root.after(100, self._update_scenario, 0)
 
     def _update_scenario(self, time):
-        print("todo")
         left_foot_weight = 70 * np.square((np.sin(2 * np.pi * time / 1000)))
         right_foot_weight = 70 * np.square((np.cos(2 * np.pi * time / 1000)))
         time += 10
         self.setup_grid.update_load_mass(0, left_foot_weight)
         self.setup_grid.update_load_mass(1, right_foot_weight)
         self.root.after(100, self._update_scenario, time)
-
 
     def _update_load(self):
         print("TODO")

@@ -599,8 +599,10 @@ class App:
         frame_test_scenarios.grid(row=0, column=2, sticky="NSEW")
 
         create_widget(frame_test_scenarios, tk.Label, text="Test Scenarios", pady=10).grid(row=0, columnspan=2)
-        self.update_mat_button = create_widget(frame_test_scenarios, tk.Button, text="Weight Shifting",
-                                               command=self._side_weight_shift).grid(row=1, columnspan=2, pady=5)
+        self.weight_shift_button = create_widget(frame_test_scenarios, tk.Button, text="Weight Shifting",
+                                                 command=self._side_weight_shift).grid(row=1, columnspan=2, pady=5)
+        self.stop_scenario_button = create_widget(frame_test_scenarios, tk.Button, text="Stop Scenario",
+                                                  command=self._stop_scenario).grid(row=4, columnspan=2, pady=5)
 
         # Centre of Pressure Readouts
         cop_readouts = create_widget(self.root, tk.Frame)

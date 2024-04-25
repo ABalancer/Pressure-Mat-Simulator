@@ -24,8 +24,8 @@ check for memory leaks
 GRID_SIZE = 16
 GRID_HEIGHT = 500
 GRID_WIDTH = 500
-TRACK_WIDTH = 10
-PITCH_WIDTH = 10
+TRACK_WIDTH = 15
+PITCH_WIDTH = 15
 
 R0 = 0.91618
 K = 1.356e-5
@@ -180,8 +180,8 @@ class SimulationSetup:
         self._loads = []
         self._num_rows = rows
         self._num_columns = columns
-        self._track_width_mm = 10  # in mm
-        self._gap_width_mm = 10
+        self._track_width_mm = TRACK_WIDTH  # in mm
+        self._pitch_width_mm = PITCH_WIDTH
         self._spacing_ratio = 0
         self._track_width_pixel = 0
         self._spacing_width_pixel = 0
@@ -189,7 +189,7 @@ class SimulationSetup:
         # Multiply real width by pixel ratio to get a pixel width.
         # Divide a pixel width by pixel ratio to get a real width
         self._sensor_area = 0
-        self.update_mat_parameters(self._num_rows, self._num_columns, self._track_width_mm, self._gap_width_mm)
+        self.update_mat_parameters(self._num_rows, self._num_columns, self._track_width_mm, self._pitch_width_mm)
 
     def update_mat_parameters(self, rows, cols, track_width, spacing_width):
         self._clear_sensors()
@@ -198,7 +198,7 @@ class SimulationSetup:
         self._num_columns = cols
         self._track_width_mm = track_width
         self._sensor_area = (track_width / 1000) ** 2  # in metres squared
-        self._gap_width_mm = spacing_width
+        self._pitch_width_mm = spacing_width
         self._spacing_ratio = spacing_width / track_width
         if self._num_rows > self._num_columns:
             num = self._num_rows
@@ -232,11 +232,13 @@ class SimulationSetup:
     def draw_load(self, weight, width, height, colour, x=0, y=0, drag=True):  # kg, mm, mm, canvas x pos, canvas y pos
         pixel_width = round(self._pixel_ratio * width)
         pixel_height = round(self._pixel_ratio * height)
+        real_x_position = x / self._pixel_ratio
+        real_y_position = y / self._pixel_ratio
         load_reference = self.canvas.create_rectangle(x, y, x + pixel_width, y + pixel_height,
                                                       outline='', fill=colour, tags='load')
         # update this to fix real cop
         load = Load(load_reference,
-                    centre_x=width/2, centre_y=height/2,
+                    centre_x=real_x_position + width/2, centre_y=real_y_position + height/2,
                     mass=weight, area=width * height / 1000000)
         if drag is True:
             self.canvas.tag_bind(load_reference, '<Button-1>', self._on_drag_start)
@@ -305,7 +307,7 @@ class SimulationSetup:
 
     # returns in mm
     def get_grid_spacing(self):
-        return self._gap_width_mm, self._track_width_mm
+        return self._pitch_width_mm, self._track_width_mm
 
     def _on_drag_start(self, event, *args):
         event.widget.start_x = event.x
@@ -506,6 +508,9 @@ class App:
 
         self.root.iconbitmap("icon.ico")
         self.root.protocol("WM_DELETE_WINDOW", self._exit)
+
+        self._scenario_running = False
+        self._scenario_update_task = None
         # Row 0
         # Canvas Labels
         self.simulation_header_label = create_widget(self.root, tk.Label, text="Simulation Setup")
@@ -628,6 +633,8 @@ class App:
         self.root.after(20, self._simulate)
 
     def _update_mat(self):
+        if self._scenario_running:
+            self._stop_scenario()
         row_number = self.entry_row_number.get()
         col_number = self.entry_col_number.get()
         track_width = self.entry_track_width.get()
@@ -638,21 +645,23 @@ class App:
             self.results_grid.update_matrix_parameters(row=int(row_number), col=int(col_number))
 
     def _side_weight_shift(self):
-        self.setup_grid.clear_loads()
-        foot_height = 250  # mm
-        foot_width = 105  # mm
-        canvas_width = self.setup_grid.canvas_width  # pixels
-        canvas_height = self.setup_grid.canvas_height  # pixels
-        pixel_ratio = self.setup_grid.get_pixel_ratio()
-        foot_height_pixels = foot_height * pixel_ratio
-        foot_width_pixels = foot_width * pixel_ratio
-        y1 = round((canvas_height - foot_height_pixels)/2)
-        x1 = y1
-        y2 = y1
-        x2 = canvas_width - foot_width_pixels - x1
-        self.setup_grid.draw_load(weight=35, width=105, height=250, colour="yellow", x=x1, y=y1, drag=False)
-        self.setup_grid.draw_load(weight=35, width=105, height=250, colour="yellow", x=x2, y=y2, drag=False)
-        self.root.after(100, self._update_scenario, 0)
+        if not self._scenario_running:
+            self._scenario_running = True
+            self.setup_grid.clear_loads()
+            foot_height = 250  # mm
+            foot_width = 105  # mm
+            canvas_width = self.setup_grid.canvas_width  # pixels
+            canvas_height = self.setup_grid.canvas_height  # pixels
+            pixel_ratio = self.setup_grid.get_pixel_ratio()
+            foot_height_pixels = foot_height * pixel_ratio
+            foot_width_pixels = foot_width * pixel_ratio
+            y1 = round((canvas_height - foot_height_pixels)/2)
+            x1 = y1
+            y2 = y1
+            x2 = canvas_width - foot_width_pixels - x1
+            self.setup_grid.draw_load(weight=35, width=105, height=250, colour="yellow", x=x1, y=y1, drag=False)
+            self.setup_grid.draw_load(weight=35, width=105, height=250, colour="yellow", x=x2, y=y2, drag=False)
+            self.root.after(100, self._update_scenario, 0)
 
     def _update_scenario(self, time):
         left_foot_weight = 70 * np.square((np.sin(2 * np.pi * time / 1000)))
@@ -660,7 +669,12 @@ class App:
         time += 10
         self.setup_grid.update_load_mass(0, left_foot_weight)
         self.setup_grid.update_load_mass(1, right_foot_weight)
-        self.root.after(100, self._update_scenario, time)
+        if self._scenario_running:
+            self._scenario_update_task = self.root.after(100, self._update_scenario, time)
+
+    def _stop_scenario(self):
+        self._scenario_running = False
+        self.root.after_cancel(self._scenario_update_task)
 
     def _update_load(self):
         print("TODO")

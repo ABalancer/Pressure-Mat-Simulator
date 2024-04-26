@@ -106,10 +106,10 @@ class Load:
         self._centre_x = centre_x
         self._centre_y = centre_y
 
-    def update_load_mass(self, mass):
+    def update_mass(self, mass):
         self._mass = mass
 
-    def update_load_area(self, area):
+    def update_area(self, area):
         self._area = area
 
     def get_location(self):
@@ -300,7 +300,10 @@ class SimulationSetup:
         return self._loads
 
     def update_load_mass(self, index, mass):
-        self._loads[index].update_load_mass(mass)
+        self._loads[index].update_mass(mass)
+
+    def update_load_location(self, index, x, y):  # x and y are the centre coordinates in real distance (mm)
+        self._loads[index].update_location(x, y)
 
     def get_pixel_ratio(self):
         return self._pixel_ratio
@@ -511,6 +514,10 @@ class App:
 
         self._scenario_running = False
         self._scenario_update_task = None
+        self._left_centre_x = None
+        self._left_centre_y = None
+        self._right_centre_x = None
+        self._right_centre_y = None
         # Row 0
         # Canvas Labels
         self.simulation_header_label = create_widget(self.root, tk.Label, text="Simulation Setup")
@@ -599,10 +606,20 @@ class App:
         frame_test_scenarios.grid(row=0, column=2, sticky="NSEW")
 
         create_widget(frame_test_scenarios, tk.Label, text="Test Scenarios", pady=10).grid(row=0, columnspan=2)
-        self.weight_shift_button = create_widget(frame_test_scenarios, tk.Button, text="Weight Shifting",
-                                                 command=self._side_weight_shift).grid(row=1, columnspan=2, pady=5)
+        self.side_weight_shift_button = create_widget(frame_test_scenarios, tk.Button, text="Side Weight Shift",
+                                                      command=lambda: self.start_scenario(
+                                                          self._side_weight_shift_scenario))\
+            .grid(row=1, columnspan=2, pady=5)
+        self.front_weight_shift_button = create_widget(frame_test_scenarios, tk.Button, text="Front Weight Shift",
+                                                       command=lambda: self.start_scenario(
+                                                           self._front_weight_shift_scenario))\
+            .grid(row=2, columnspan=2, pady=5)
+        self.foot_slide_button = create_widget(frame_test_scenarios, tk.Button, text="Foot Sliding",
+                                               command=lambda: self.start_scenario(
+                                                   self._foot_slide_shift_scenario))\
+            .grid(row=3, columnspan=2, pady=5)
         self.stop_scenario_button = create_widget(frame_test_scenarios, tk.Button, text="Stop Scenario",
-                                                  command=self._stop_scenario).grid(row=4, columnspan=2, pady=5)
+                                                  command=self.stop_scenario).grid(row=4, columnspan=2, pady=5)
 
         # Centre of Pressure Readouts
         cop_readouts = create_widget(self.root, tk.Frame)
@@ -636,7 +653,7 @@ class App:
 
     def _update_mat(self):
         if self._scenario_running:
-            self._stop_scenario()
+            self.stop_scenario()
         row_number = self.entry_row_number.get()
         col_number = self.entry_col_number.get()
         track_width = self.entry_track_width.get()
@@ -646,35 +663,56 @@ class App:
                                                   track_width=int(track_width), spacing_width=int(spacing_width))
             self.results_grid.update_matrix_parameters(row=int(row_number), col=int(col_number))
 
-    def _side_weight_shift(self):
-        if not self._scenario_running:
-            self._scenario_running = True
-            self.setup_grid.clear_loads()
-            foot_height = 250  # mm
-            foot_width = 105  # mm
-            canvas_width = self.setup_grid.canvas_width  # pixels
-            canvas_height = self.setup_grid.canvas_height  # pixels
-            pixel_ratio = self.setup_grid.get_pixel_ratio()
-            foot_height_pixels = foot_height * pixel_ratio
-            foot_width_pixels = foot_width * pixel_ratio
-            y1 = round((canvas_height - foot_height_pixels)/2)
-            x1 = y1
-            y2 = y1
-            x2 = canvas_width - foot_width_pixels - x1
-            self.setup_grid.draw_load(weight=35, width=105, height=250, colour="yellow", x=x1, y=y1, drag=False)
-            self.setup_grid.draw_load(weight=35, width=105, height=250, colour="yellow", x=x2, y=y2, drag=False)
-            self.root.after(100, self._update_scenario, 0)
+    def start_scenario(self, scenario_function):
+        if self._scenario_running:
+            self.stop_scenario()
+        self._scenario_running = True
+        self.setup_grid.clear_loads()
+        foot_height = 250  # mm
+        foot_width = 105  # mm
+        canvas_width = self.setup_grid.canvas_width  # pixels
+        canvas_height = self.setup_grid.canvas_height  # pixels
+        pixel_ratio = self.setup_grid.get_pixel_ratio()
+        foot_height_pixels = foot_height * pixel_ratio
+        foot_width_pixels = foot_width * pixel_ratio
+        y1 = round((canvas_height - foot_height_pixels)/2)
+        x1 = y1
+        y2 = y1
+        x2 = canvas_width - foot_width_pixels - x1
+        self.setup_grid.draw_load(weight=40, width=105, height=250, colour="yellow", x=x1, y=y1, drag=False)
+        self.setup_grid.draw_load(weight=40, width=105, height=250, colour="yellow", x=x2, y=y2, drag=False)
+        loads = self.setup_grid.get_loads()
+        self._left_centre_x, self._left_centre_y = loads[0].get_location()
+        self._right_centre_x, self._right_centre_y = loads[1].get_location()
+        self.root.after(100, scenario_function, 0)
 
-    def _update_scenario(self, time):
+    def _side_weight_shift_scenario(self, time):
         left_foot_weight = 70 * np.square((np.sin(2 * np.pi * time / 1000)))
         right_foot_weight = 70 * np.square((np.cos(2 * np.pi * time / 1000)))
         time += 10
         self.setup_grid.update_load_mass(0, left_foot_weight)
         self.setup_grid.update_load_mass(1, right_foot_weight)
         if self._scenario_running:
-            self._scenario_update_task = self.root.after(100, self._update_scenario, time)
+            self._scenario_update_task = self.root.after(100, self._side_weight_shift_scenario, time)
 
-    def _stop_scenario(self):
+    def _front_weight_shift_scenario(self, time):
+        print("todo")
+
+    def _foot_slide_shift_scenario(self, time):
+        left_foot_multiplier = np.sin(2 * np.pi * time / 1000) if np.sin(2 * np.pi * time / 1000) >= 0 else 0
+        right_foot_multiplier = -np.sin(2 * np.pi * time / 1000) if -np.sin(2 * np.pi * time / 1000) >= 0 else 0
+        left_foot_x = (self._left_centre_x + (105 / self.setup_grid.get_pixel_ratio()) * left_foot_multiplier)
+        right_foot_x = (self._right_centre_x + ((self.setup_grid.canvas_width - 105) / self.setup_grid.get_pixel_ratio()) * right_foot_multiplier)
+        time += 10
+        self.setup_grid.update_load_location(0, left_foot_x, self._left_centre_y)
+        self.setup_grid.update_load_location(1, right_foot_x, self._right_centre_y)
+        self.setup_grid.canvas.move(0, round(left_foot_x * self.setup_grid.get_pixel_ratio()), 0)
+        print(round(left_foot_x * self.setup_grid.get_pixel_ratio()))
+        self.setup_grid.canvas.move(1, round(right_foot_x * self.setup_grid.get_pixel_ratio()), 0)
+        if self._scenario_running:
+            self._scenario_update_task = self.root.after(100, self._foot_slide_shift_scenario, time)
+
+    def stop_scenario(self):
         self._scenario_running = False
         self.root.after_cancel(self._scenario_update_task)
 

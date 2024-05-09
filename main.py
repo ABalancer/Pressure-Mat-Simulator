@@ -136,7 +136,7 @@ class Sensor:
         self._reference = reference
         self._sensor_area = sensor_area
         self._r0 = r0
-        self._pdr = r0
+        self._pdr = self._r0 / self._sensor_area
         self._k = k
 
     def get_reference(self):

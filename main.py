@@ -728,7 +728,7 @@ class App:
         left_foot_x1, left_foot_y1, left_foot_x2, left_foot_y2 = self.setup_grid.get_load_size(0)
         right_foot_x1, right_foot_y1, right_foot_x2, right_foot_y2 = self.setup_grid.get_load_size(1)
 
-        #left_foot_y2 = self.
+        # left_foot_y2 = self.
         self.setup_grid.update_load_size(0, left_foot_x1, left_foot_y1, left_foot_x2, left_foot_y2)
 
         time += 100

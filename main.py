@@ -316,6 +316,21 @@ class SimulationSetup:
         self._loads[index].update_location(x, y)
         self.canvas.move(self._loads[index].get_reference(), delta_x_pixels, delta_y_pixels)
 
+    def get_load_size(self, index):
+        x1, y1, x2, y2 = self.canvas.coords(self._loads[index].get_reference())
+        x1 *= self._pixel_ratio
+        y1 *= self._pixel_ratio
+        x2 *= self._pixel_ratio
+        y2 *= self._pixel_ratio
+        return x1, y1, x2, y2
+
+    def update_load_size(self, index, x1, y1, x2, y2):  # top left corner, bottom right corner, size is real distance mm
+        x1_pixels = round(x1 / self._pixel_ratio)
+        y1_pixels = round(y1 / self._pixel_ratio)
+        x2_pixels = round(x2 / self._pixel_ratio)
+        y2_pixels = round(y2 / self._pixel_ratio)
+        self.canvas.coords(self._loads[index].get_reference(), x1_pixels, y1_pixels, x2_pixels, y2_pixels)
+
     def get_pixel_ratio(self):
         return self._pixel_ratio
 
@@ -710,7 +725,15 @@ class App:
             self._scenario_update_task = self.root.after(100, self._side_weight_shift_scenario, time)
 
     def _front_weight_shift_scenario(self, time):
-        print("todo")
+        left_foot_x1, left_foot_y1, left_foot_x2, left_foot_y2 = self.setup_grid.get_load_size(0)
+        right_foot_x1, right_foot_y1, right_foot_x2, right_foot_y2 = self.setup_grid.get_load_size(1)
+
+        #left_foot_y2 = self.
+        self.setup_grid.update_load_size(0, left_foot_x1, left_foot_y1, left_foot_x2, left_foot_y2)
+
+        time += 100
+        if self._scenario_running:
+            self._scenario_update_task = self.root.after(100, self._front_weight_shift_scenario, time)
 
     def _foot_slide_shift_scenario(self, time):
         left_foot_multiplier = np.sin(2 * np.pi * time / 10000) if np.sin(2 * np.pi * time / 10000) >= 0 else 0
@@ -727,7 +750,9 @@ class App:
 
     def stop_scenario(self):
         self._scenario_running = False
-        self.root.after_cancel(self._scenario_update_task)
+        if self._scenario_update_task is not None:
+            self.root.after_cancel(self._scenario_update_task)
+            self._scenario_update_task = None
 
     def _update_load(self):
         print("TODO")

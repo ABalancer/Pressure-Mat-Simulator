@@ -96,7 +96,7 @@ def create_widget(parent, widget_type, *args, **kwargs):
 
 class Load:
     def __init__(self, reference, centre_x, centre_y, mass, area):
-        self.reference = reference
+        self._reference = reference
         self._centre_x = centre_x
         self._centre_y = centre_y
         self._mass = mass
@@ -112,6 +112,12 @@ class Load:
     def update_area(self, area):
         self._area = area
 
+    def get_reference(self):
+        return self._reference
+
+    def get_mass(self):
+        return self._mass
+
     def get_location(self):
         return self._centre_x, self._centre_y
 
@@ -124,17 +130,17 @@ class Load:
     def compute_y_moment(self):
         return self._mass * self._centre_y
 
-    def get_mass(self):
-        return self._mass
-
 
 class Sensor:
     def __init__(self, reference, sensor_area, r0, k):
-        self.reference = reference
+        self._reference = reference
         self._sensor_area = sensor_area
         self._r0 = r0
         self._pdr = self._r0 / (self._sensor_area * 5)
         self._k = k
+
+    def get_reference(self):
+        return self._reference
 
     def update_sensor(self, sensor_area, pdr, r0, k):
         self._sensor_area = sensor_area
@@ -208,6 +214,7 @@ class SimulationSetup:
         self._spacing_width_pixel = self._spacing_ratio * self._track_width_pixel
         self._pixel_ratio = self._track_width_pixel / self._track_width_mm
         self._draw_sensors()
+        # temporary dummy loads until a setting that allows users to add loads is created
         self.draw_load(20, 70, 70, 'green')
         self.draw_load(20, 40, 40, 'blue')
 
@@ -248,8 +255,8 @@ class SimulationSetup:
     # Checks if the loads and sensors overlap. If they do, computes and returns the pressure reading.
     def _get_sensor_pressure(self, sensor, load, approximate):
         # Get the coordinates of the rectangles
-        sensor_coordinates = self.canvas.coords(sensor.reference)
-        load_coordinates = self.canvas.coords(load.reference)
+        sensor_coordinates = self.canvas.coords(sensor.get_reference())
+        load_coordinates = self.canvas.coords(load.get_reference())
 
         # Coordinates: [x1, y1, x2, y2]
         x1 = max(sensor_coordinates[0], load_coordinates[0])
@@ -302,8 +309,12 @@ class SimulationSetup:
     def update_load_mass(self, index, mass):
         self._loads[index].update_mass(mass)
 
-    def update_load_location(self, index, x, y):  # x and y are the centre coordinates in real distance (mm)
+    def update_load_location(self, index, x, y):  # x and y are the absolute centre coordinates in real distance (mm)
+        start_x, start_y = self._loads[index].get_location()
+        delta_x_pixels = round((x - start_x) / self._pixel_ratio)
+        delta_y_pixels = round((y - start_y) / self._pixel_ratio)
         self._loads[index].update_location(x, y)
+        self.canvas.move(self._loads[index].get_reference(), delta_x_pixels, delta_y_pixels)
 
     def get_pixel_ratio(self):
         return self._pixel_ratio
@@ -322,7 +333,7 @@ class SimulationSetup:
         reference = event.widget.find_withtag(tk.CURRENT)[0]
         self.canvas.move(reference, delta_x, delta_y)
         for load in self._loads:
-            if load.reference == reference:
+            if load._reference == reference:
                 previous_centre_x, previous_centre_y = load.get_location()
                 new_centre_x = previous_centre_x + delta_x / self._pixel_ratio
                 new_centre_y = previous_centre_y + delta_y / self._pixel_ratio
@@ -512,12 +523,15 @@ class App:
         self.root.iconbitmap("icon.ico")
         self.root.protocol("WM_DELETE_WINDOW", self._exit)
 
+        self.foot_height = 250  # mm
+        self.foot_width = 105  # mm
         self._scenario_running = False
         self._scenario_update_task = None
         self._left_centre_x = None
         self._left_centre_y = None
         self._right_centre_x = None
         self._right_centre_y = None
+
         # Row 0
         # Canvas Labels
         self.simulation_header_label = create_widget(self.root, tk.Label, text="Simulation Setup")
@@ -668,28 +682,28 @@ class App:
             self.stop_scenario()
         self._scenario_running = True
         self.setup_grid.clear_loads()
-        foot_height = 250  # mm
-        foot_width = 105  # mm
         canvas_width = self.setup_grid.canvas_width  # pixels
         canvas_height = self.setup_grid.canvas_height  # pixels
         pixel_ratio = self.setup_grid.get_pixel_ratio()
-        foot_height_pixels = foot_height * pixel_ratio
-        foot_width_pixels = foot_width * pixel_ratio
+        foot_height_pixels = self.foot_height * pixel_ratio
+        foot_width_pixels = self.foot_width * pixel_ratio
         y1 = round((canvas_height - foot_height_pixels)/2)
         x1 = y1
         y2 = y1
         x2 = canvas_width - foot_width_pixels - x1
-        self.setup_grid.draw_load(weight=40, width=105, height=250, colour="yellow", x=x1, y=y1, drag=False)
-        self.setup_grid.draw_load(weight=40, width=105, height=250, colour="yellow", x=x2, y=y2, drag=False)
+        self.setup_grid.draw_load(weight=40, width=self.foot_width, height=self.foot_height, colour="yellow",
+                                  x=x1, y=y1, drag=False)
+        self.setup_grid.draw_load(weight=40, width=self.foot_width, height=self.foot_height, colour="yellow",
+                                  x=x2, y=y2, drag=False)
         loads = self.setup_grid.get_loads()
         self._left_centre_x, self._left_centre_y = loads[0].get_location()
         self._right_centre_x, self._right_centre_y = loads[1].get_location()
         self.root.after(100, scenario_function, 0)
 
     def _side_weight_shift_scenario(self, time):
-        left_foot_weight = 70 * np.square((np.sin(2 * np.pi * time / 1000)))
-        right_foot_weight = 70 * np.square((np.cos(2 * np.pi * time / 1000)))
-        time += 10
+        left_foot_weight = 70 * np.square((np.sin(2 * np.pi * time / 10000)))
+        right_foot_weight = 70 * np.square((np.cos(2 * np.pi * time / 10000)))
+        time += 100
         self.setup_grid.update_load_mass(0, left_foot_weight)
         self.setup_grid.update_load_mass(1, right_foot_weight)
         if self._scenario_running:
@@ -699,16 +713,15 @@ class App:
         print("todo")
 
     def _foot_slide_shift_scenario(self, time):
-        left_foot_multiplier = np.sin(2 * np.pi * time / 1000) if np.sin(2 * np.pi * time / 1000) >= 0 else 0
-        right_foot_multiplier = -np.sin(2 * np.pi * time / 1000) if -np.sin(2 * np.pi * time / 1000) >= 0 else 0
-        left_foot_x = (self._left_centre_x + (105 / self.setup_grid.get_pixel_ratio()) * left_foot_multiplier)
-        right_foot_x = (self._right_centre_x + ((self.setup_grid.canvas_width - 105) / self.setup_grid.get_pixel_ratio()) * right_foot_multiplier)
-        time += 10
+        left_foot_multiplier = np.sin(2 * np.pi * time / 10000) if np.sin(2 * np.pi * time / 10000) >= 0 else 0
+        right_foot_multiplier = -np.sin(2 * np.pi * time / 10000) if -np.sin(2 * np.pi * time / 10000) >= 0 else 0
+        left_foot_x = (self._left_centre_x - (self.foot_width / self.setup_grid.get_pixel_ratio())
+                       * left_foot_multiplier)
+        right_foot_x = (self._right_centre_x + (self.foot_width / self.setup_grid.get_pixel_ratio())
+                        * right_foot_multiplier)
+        time += 100
         self.setup_grid.update_load_location(0, left_foot_x, self._left_centre_y)
         self.setup_grid.update_load_location(1, right_foot_x, self._right_centre_y)
-        self.setup_grid.canvas.move(0, round(left_foot_x * self.setup_grid.get_pixel_ratio()), 0)
-        print(round(left_foot_x * self.setup_grid.get_pixel_ratio()))
-        self.setup_grid.canvas.move(1, round(right_foot_x * self.setup_grid.get_pixel_ratio()), 0)
         if self._scenario_running:
             self._scenario_update_task = self.root.after(100, self._foot_slide_shift_scenario, time)
 

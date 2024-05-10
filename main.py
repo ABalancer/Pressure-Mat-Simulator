@@ -538,7 +538,7 @@ class App:
         self.root.iconbitmap("icon.ico")
         self.root.protocol("WM_DELETE_WINDOW", self._exit)
 
-        self.foot_height = 250  # mm
+        self.foot_length = 250  # mm
         self.foot_width = 105  # mm
         self._scenario_running = False
         self._scenario_update_task = None
@@ -546,6 +546,13 @@ class App:
         self._left_centre_y = None
         self._right_centre_x = None
         self._right_centre_y = None
+        self._error_x = 0
+        self._error_y = 0
+        self._average_error_x = None
+        self._average_error_y = None
+        self._average_error_x_sum = 0
+        self._average_error_y_sum = 0
+        self._average_error_count = 0
 
         # Row 0
         # Canvas Labels
@@ -664,6 +671,9 @@ class App:
         create_widget(cop_readouts, tk.Label, text="Error:").grid(row=3, column=0, sticky="w")
         self.error_CoP_label = create_widget(cop_readouts, tk.Label, text="0")
         self.error_CoP_label.grid(row=3, column=1, sticky="w")
+        create_widget(cop_readouts, tk.Label, text="Average Error:").grid(row=4, column=0, sticky="w")
+        self.average_error_CoP_label = create_widget(cop_readouts, tk.Label, text="0")
+        self.average_error_CoP_label.grid(row=4, column=1, sticky="w")
 
         # Row 5
         # Buttons
@@ -681,15 +691,15 @@ class App:
         self.root.after(20, self._simulate)
 
     def _update_mat(self):
-        if self._scenario_running:
-            self.stop_scenario()
+        self.stop_scenario()
         row_number = self.entry_row_number.get()
         col_number = self.entry_col_number.get()
         track_width = self.entry_track_width.get()
-        spacing_width = self.entry_spacing.get()
-        if row_number.isdigit() and col_number.isdigit() and track_width.isdigit() and spacing_width.isdigit():
+        pitch_width = self.entry_spacing.get()
+        if row_number.isdigit() and col_number.isdigit() and track_width.replace(".", "").isdigit() \
+                and pitch_width.replace(".", "").isdigit():
             self.setup_grid.update_mat_parameters(rows=int(row_number), cols=int(col_number),
-                                                  track_width=int(track_width), spacing_width=int(spacing_width))
+                                                  track_width=float(track_width), spacing_width=float(pitch_width))
             self.results_grid.update_matrix_parameters(row=int(row_number), col=int(col_number))
 
     def start_scenario(self, scenario_function):
@@ -700,15 +710,15 @@ class App:
         canvas_width = self.setup_grid.canvas_width  # pixels
         canvas_height = self.setup_grid.canvas_height  # pixels
         pixel_ratio = self.setup_grid.get_pixel_ratio()
-        foot_height_pixels = self.foot_height * pixel_ratio
+        foot_height_pixels = self.foot_length * pixel_ratio
         foot_width_pixels = self.foot_width * pixel_ratio
         y1 = round((canvas_height - foot_height_pixels)/2)
         x1 = y1
         y2 = y1
         x2 = canvas_width - foot_width_pixels - x1
-        self.setup_grid.draw_load(weight=40, width=self.foot_width, height=self.foot_height, colour="yellow",
+        self.setup_grid.draw_load(weight=40, width=self.foot_width, height=self.foot_length, colour="yellow",
                                   x=x1, y=y1, drag=False)
-        self.setup_grid.draw_load(weight=40, width=self.foot_width, height=self.foot_height, colour="yellow",
+        self.setup_grid.draw_load(weight=40, width=self.foot_width, height=self.foot_length, colour="yellow",
                                   x=x2, y=y2, drag=False)
         loads = self.setup_grid.get_loads()
         self._left_centre_x, self._left_centre_y = loads[0].get_location()
@@ -718,9 +728,10 @@ class App:
     def _side_weight_shift_scenario(self, time):
         left_foot_weight = 70 * np.square((np.sin(2 * np.pi * time / 10000)))
         right_foot_weight = 70 * np.square((np.cos(2 * np.pi * time / 10000)))
-        time += 100
         self.setup_grid.update_load_mass(0, left_foot_weight)
         self.setup_grid.update_load_mass(1, right_foot_weight)
+        self._calculate_average_error(time)
+        time += 100
         if self._scenario_running:
             self._scenario_update_task = self.root.after(100, self._side_weight_shift_scenario, time)
 
@@ -728,7 +739,8 @@ class App:
         left_foot_x1, left_foot_y1, left_foot_x2, left_foot_y2 = self.setup_grid.get_load_size(0)
         right_foot_x1, right_foot_y1, right_foot_x2, right_foot_y2 = self.setup_grid.get_load_size(1)
 
-        # left_foot_y2 = self.
+        # left_foot_y1 = self._left_centre_y - np.sin(2 * np.pi * time / 10000) * self.foot_length / 2
+        # left_foot_y2 = self._left_centre_y + np.sin(2 * np.pi * time / 10000) * self.foot_length / 2
         self.setup_grid.update_load_size(0, left_foot_x1, left_foot_y1, left_foot_x2, left_foot_y2)
 
         time += 100
@@ -736,23 +748,39 @@ class App:
             self._scenario_update_task = self.root.after(100, self._front_weight_shift_scenario, time)
 
     def _foot_slide_shift_scenario(self, time):
-        left_foot_multiplier = np.sin(2 * np.pi * time / 10000) if np.sin(2 * np.pi * time / 10000) >= 0 else 0
-        right_foot_multiplier = -np.sin(2 * np.pi * time / 10000) if -np.sin(2 * np.pi * time / 10000) >= 0 else 0
+        left_foot_multiplier = np.sin(2 * np.pi * time / 5000) if np.sin(2 * np.pi * time / 5000) >= 0 else 0
+        right_foot_multiplier = -np.sin(2 * np.pi * time / 5000) if -np.sin(2 * np.pi * time / 5000) >= 0 else 0
         left_foot_x = (self._left_centre_x - (self.foot_width / self.setup_grid.get_pixel_ratio())
                        * left_foot_multiplier)
         right_foot_x = (self._right_centre_x + (self.foot_width / self.setup_grid.get_pixel_ratio())
                         * right_foot_multiplier)
-        time += 100
         self.setup_grid.update_load_location(0, left_foot_x, self._left_centre_y)
         self.setup_grid.update_load_location(1, right_foot_x, self._right_centre_y)
+        self._calculate_average_error(time)
+        time += 100
         if self._scenario_running:
             self._scenario_update_task = self.root.after(100, self._foot_slide_shift_scenario, time)
 
+    def _calculate_average_error(self, time):
+        if self._average_error_y is None or self._average_error_x is None:
+            self._average_error_x_sum += abs(self._error_x)
+            self._average_error_y_sum += abs(self._error_y)
+            self._average_error_count += 1
+            if time >= 5000:
+                self._average_error_x = self._average_error_x_sum / self._average_error_count
+                self._average_error_y = self._average_error_y_sum / self._average_error_count
+
     def stop_scenario(self):
-        self._scenario_running = False
-        if self._scenario_update_task is not None:
-            self.root.after_cancel(self._scenario_update_task)
-            self._scenario_update_task = None
+        if self._scenario_running:
+            self._scenario_running = False
+            self._average_error_y = None
+            self._average_error_x = None
+            self._average_error_x_sum = 0
+            self._average_error_y_sum = 0
+            self._average_error_count = 0
+            if self._scenario_update_task is not None:
+                self.root.after_cancel(self._scenario_update_task)
+                self._scenario_update_task = None
 
     def _update_load(self):
         print("TODO")
@@ -780,11 +808,14 @@ class App:
         gap_spacing, track_spacing = self.setup_grid.get_grid_spacing()
         estimated_x, estimated_y = self.results_grid.plot_estimated_centre_of_pressure(matrix_data,
                                                                                        gap_spacing, track_spacing)
-        error_x = 100 * (estimated_x - real_x) / real_x
-        error_y = 100 * (estimated_y - real_y) / real_y
+        self._error_x = 100 * (estimated_x - real_x) / real_x
+        self._error_y = 100 * (estimated_y - real_y) / real_y
         self.real_CoP_label.config(text="x={:7.2f}mm, y={:7.2f}mm".format(real_x, real_y))
         self.estimated_CoP_label.config(text="x={:7.2f}mm, y={:7.2f}mm".format(estimated_x, estimated_y))
-        self.error_CoP_label.config(text="x={:7.2f}%, y={:7.2f}%".format(error_x, error_y))
+        self.error_CoP_label.config(text="x={:7.2f}%,     y={:7.2f}%".format(self._error_x, self._error_y))
+        self.average_error_CoP_label.config(text="x={:7.2f}%,     y={:7.2f}%"
+                                            .format(self._average_error_x if self._average_error_x is not None else 0,
+                                                    self._average_error_y if self._average_error_y is not None else 0))
 
     def run(self):
         self.root.mainloop()

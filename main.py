@@ -243,6 +243,7 @@ class SimulationSetup:
         real_y_position = y / self._pixel_ratio
         load_reference = self.canvas.create_rectangle(x, y, x + pixel_width, y + pixel_height,
                                                       outline='', fill=colour, tags='load')
+
         # update this to fix real cop
         load = Load(load_reference,
                     centre_x=real_x_position + width/2, centre_y=real_y_position + height/2,
@@ -311,24 +312,24 @@ class SimulationSetup:
 
     def update_load_location(self, index, x, y):  # x and y are the absolute centre coordinates in real distance (mm)
         start_x, start_y = self._loads[index].get_location()
-        delta_x_pixels = round((x - start_x) / self._pixel_ratio)
-        delta_y_pixels = round((y - start_y) / self._pixel_ratio)
+        delta_x_pixels = round((x - start_x) * self._pixel_ratio)
+        delta_y_pixels = round((y - start_y) * self._pixel_ratio)
         self._loads[index].update_location(x, y)
         self.canvas.move(self._loads[index].get_reference(), delta_x_pixels, delta_y_pixels)
 
     def get_load_size(self, index):
         x1, y1, x2, y2 = self.canvas.coords(self._loads[index].get_reference())
-        x1 *= self._pixel_ratio
-        y1 *= self._pixel_ratio
-        x2 *= self._pixel_ratio
-        y2 *= self._pixel_ratio
+        x1 /= self._pixel_ratio
+        y1 /= self._pixel_ratio
+        x2 /= self._pixel_ratio
+        y2 /= self._pixel_ratio
         return x1, y1, x2, y2
 
     def update_load_size(self, index, x1, y1, x2, y2):  # top left corner, bottom right corner, size is real distance mm
-        x1_pixels = round(x1 / self._pixel_ratio)
-        y1_pixels = round(y1 / self._pixel_ratio)
-        x2_pixels = round(x2 / self._pixel_ratio)
-        y2_pixels = round(y2 / self._pixel_ratio)
+        x1_pixels = round(x1 * self._pixel_ratio)
+        y1_pixels = round(y1 * self._pixel_ratio)
+        x2_pixels = round(x2 * self._pixel_ratio)
+        y2_pixels = round(y2 * self._pixel_ratio)
         centre_x = x1 + ((x2 - x1) / 2)
         centre_y = y1 + ((y2 - y1) / 2)
         self._loads[index].update_location(centre_x, centre_y)
@@ -746,6 +747,7 @@ class App:
         right_foot_x1, right_foot_y1, right_foot_x2, right_foot_y2 = self.setup_grid.get_load_size(1)
         y1_max = self._left_centre_y - self.foot_length / 2
         y2_max = self.foot_length / 2 + self._left_centre_y
+
         sine_multiplier = np.sin(2 * np.pi * time / 10000)
         if sine_multiplier >= 0:
             foot_y2 = (y2_max - y1_max) * (1 - (2 * sine_multiplier / 3)) + y1_max

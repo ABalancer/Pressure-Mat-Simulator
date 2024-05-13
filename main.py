@@ -9,6 +9,7 @@ Create test scenarios (use ovals for feet)
 
 get data to fill table from simulations
 
+fix slight error in real cop measurement
 
 later:
 

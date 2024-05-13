@@ -100,7 +100,7 @@ class Load:
         self._centre_x = centre_x
         self._centre_y = centre_y
         self._mass = mass
-        self._area = area
+        self._area = area  # area in m^2
 
     def update_location(self, centre_x, centre_y):
         self._centre_x = centre_x
@@ -329,7 +329,13 @@ class SimulationSetup:
         y1_pixels = round(y1 / self._pixel_ratio)
         x2_pixels = round(x2 / self._pixel_ratio)
         y2_pixels = round(y2 / self._pixel_ratio)
+        centre_x = x1 + ((x2 - x1) / 2)
+        centre_y = y1 + ((y2 - y1) / 2)
+        self._loads[index].update_location(centre_x, centre_y)
         self.canvas.coords(self._loads[index].get_reference(), x1_pixels, y1_pixels, x2_pixels, y2_pixels)
+
+    def update_load_area(self, index, area):
+        self._loads[index].update_area(area)
 
     def get_pixel_ratio(self):
         return self._pixel_ratio
@@ -710,9 +716,9 @@ class App:
         canvas_width = self.setup_grid.canvas_width  # pixels
         canvas_height = self.setup_grid.canvas_height  # pixels
         pixel_ratio = self.setup_grid.get_pixel_ratio()
-        foot_height_pixels = self.foot_length * pixel_ratio
+        foot_length_pixels = self.foot_length * pixel_ratio
         foot_width_pixels = self.foot_width * pixel_ratio
-        y1 = round((canvas_height - foot_height_pixels)/2)
+        y1 = round((canvas_height - foot_length_pixels)/2)
         x1 = y1
         y2 = y1
         x2 = canvas_width - foot_width_pixels - x1
@@ -736,12 +742,21 @@ class App:
             self._scenario_update_task = self.root.after(100, self._side_weight_shift_scenario, time)
 
     def _front_weight_shift_scenario(self, time):
-        left_foot_x1, left_foot_y1, left_foot_x2, left_foot_y2 = self.setup_grid.get_load_size(0)
+        left_foot_x1, foot_y1, left_foot_x2, foot_y2 = self.setup_grid.get_load_size(0)
         right_foot_x1, right_foot_y1, right_foot_x2, right_foot_y2 = self.setup_grid.get_load_size(1)
+        y1_max = self._left_centre_y - self.foot_length / 2
+        y2_max = self.foot_length / 2 + self._left_centre_y
+        sine_multiplier = np.sin(2 * np.pi * time / 10000)
+        if sine_multiplier >= 0:
+            foot_y2 = (y2_max - y1_max) * (1 - (2 * sine_multiplier / 3)) + y1_max
+        else:
+            foot_y1 = y2_max - (y2_max - y1_max) * (1 + (2 * sine_multiplier / 3))
 
-        # left_foot_y1 = self._left_centre_y - np.sin(2 * np.pi * time / 10000) * self.foot_length / 2
-        # left_foot_y2 = self._left_centre_y + np.sin(2 * np.pi * time / 10000) * self.foot_length / 2
-        self.setup_grid.update_load_size(0, left_foot_x1, left_foot_y1, left_foot_x2, left_foot_y2)
+        self.setup_grid.update_load_size(0, left_foot_x1, foot_y1, left_foot_x2, foot_y2)
+        self.setup_grid.update_load_size(1, right_foot_x1, foot_y1, right_foot_x2, foot_y2)
+        area = (left_foot_x2 - left_foot_x1) * (foot_y2 - foot_y1) / 1000000
+        self.setup_grid.update_load_area(0, area)
+        self.setup_grid.update_load_area(1, area)
 
         time += 100
         if self._scenario_running:

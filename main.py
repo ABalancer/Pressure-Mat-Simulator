@@ -760,6 +760,7 @@ class App:
         area = (left_foot_x2 - left_foot_x1) * (foot_y2 - foot_y1) / 1000000
         self.setup_grid.update_load_area(0, area)
         self.setup_grid.update_load_area(1, area)
+        self._calculate_average_error(time)
 
         time += 100
         if self._scenario_running:

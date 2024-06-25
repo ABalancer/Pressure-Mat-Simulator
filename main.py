@@ -1,21 +1,14 @@
 import tkinter as tk
 import numpy as np
+import random
 from scipy import constants
 from tkinter import ttk
 
 '''
 TODO:
-Create test scenarios (use ovals for feet)
-
-get data to fill table from simulations
-
 fix slight error in real cop measurement
 
-later:
-
 make objects configurable
-make test scenarios
-display numerical CoP values as well as error
 
 prevent overlaps and moving objects out of the border - also reset load positions if they leave the screen
 pause program when moving window to get rid of lag
@@ -23,7 +16,7 @@ check for memory leaks
 '''
 
 GRID_SIZE = 16
-GRID_HEIGHT = 500
+GRID_LENGTH = 500
 GRID_WIDTH = 500
 TRACK_WIDTH = 15
 PITCH_WIDTH = 15
@@ -189,6 +182,8 @@ class SimulationSetup:
         self._num_columns = columns
         self._track_width_mm = TRACK_WIDTH  # in mm
         self._pitch_width_mm = PITCH_WIDTH
+        self._mat_width = self._num_columns * (self._track_width_mm + self._pitch_width_mm)
+        self._mat_length = self._num_rows * (self._track_width_mm + self._pitch_width_mm)
         self._spacing_ratio = 0
         self._track_width_pixel = 0
         self._spacing_width_pixel = 0
@@ -207,6 +202,8 @@ class SimulationSetup:
         self._sensor_area = (track_width / 1000) ** 2  # in metres squared
         self._pitch_width_mm = spacing_width
         self._spacing_ratio = spacing_width / track_width
+        self._mat_width = self._num_columns * (self._track_width_mm + self._pitch_width_mm)
+        self._mat_length = self._num_rows * (self._track_width_mm + self._pitch_width_mm)
         if self._num_rows > self._num_columns:
             num = self._num_rows
         else:
@@ -308,6 +305,9 @@ class SimulationSetup:
     def get_loads(self):
         return self._loads
 
+    def get_mat_dimensions(self):
+        return self._mat_width, self._mat_length
+
     def update_load_mass(self, index, mass):
         self._loads[index].update_mass(mass)
 
@@ -356,7 +356,7 @@ class SimulationSetup:
         reference = event.widget.find_withtag(tk.CURRENT)[0]
         self.canvas.move(reference, delta_x, delta_y)
         for load in self._loads:
-            if load._reference == reference:
+            if load.get_reference() == reference:
                 previous_centre_x, previous_centre_y = load.get_location()
                 new_centre_x = previous_centre_x + delta_x / self._pixel_ratio
                 new_centre_y = previous_centre_y + delta_y / self._pixel_ratio
@@ -571,13 +571,13 @@ class App:
 
         # Row 1
         # Canvas simulation input grid
-        self.simulation_canvas = create_widget(self.root, tk.Canvas, width=GRID_WIDTH, height=GRID_HEIGHT,
+        self.simulation_canvas = create_widget(self.root, tk.Canvas, width=GRID_WIDTH, height=GRID_LENGTH,
                                                borderwidth=0)
         self.simulation_canvas.grid(row=1, column=0, columnspan=1)
         self.setup_grid = SimulationSetup(self.simulation_canvas, rows=GRID_SIZE, columns=GRID_SIZE)
 
         # Canvas result grid
-        self.result_canvas = create_widget(self.root, tk.Canvas, width=GRID_WIDTH, height=GRID_HEIGHT, borderwidth=0)
+        self.result_canvas = create_widget(self.root, tk.Canvas, width=GRID_WIDTH, height=GRID_LENGTH, borderwidth=0)
         self.result_canvas.grid(row=1, column=1, columnspan=1)
 
         self.results_grid = SimulationResult(self.result_canvas, rows=GRID_SIZE, columns=GRID_SIZE)
@@ -669,8 +669,12 @@ class App:
                                                command=lambda: self.start_scenario(
                                                    self._foot_slide_shift_scenario))\
             .grid(row=3, columnspan=2, pady=1)
+        self.foot_slide_button = create_widget(frame_test_scenarios, tk.Button, text="Random Placements",
+                                               command=lambda: self.start_scenario(
+                                                   self._random_foot_placement_scenario))\
+            .grid(row=4, columnspan=2, pady=1)
         self.stop_scenario_button = create_widget(frame_test_scenarios, tk.Button, text="Stop Scenario",
-                                                  command=self.stop_scenario).grid(row=4, columnspan=2, pady=1)
+                                                  command=self.stop_scenario).grid(row=5, columnspan=2, pady=1)
 
         # Row 3
         # Centre of Pressure Readouts
@@ -723,6 +727,8 @@ class App:
     def start_scenario(self, scenario_function):
         if self._scenario_running:
             self.stop_scenario()
+        random.seed(0)
+        np.random.seed(0)
         self._scenario_running = True
         self.setup_grid.clear_loads()
         canvas_width = self.setup_grid.canvas_width  # pixels
@@ -789,6 +795,49 @@ class App:
         time += 100
         if self._scenario_running:
             self._scenario_update_task = self.root.after(100, self._foot_slide_shift_scenario, time)
+
+    def _random_foot_placement_scenario(self, time):
+        def generate_positions():
+            mat_width, mat_length = self.setup_grid.get_mat_dimensions()
+            x1 = round(random.randint(0, mat_width - self.foot_width) + self.foot_width / 2)
+            y1 = round(random.randint(0, mat_length - self.foot_length) + self.foot_length / 2)
+            x2 = round(random.randint(0, mat_width - self.foot_width) + self.foot_width / 2)
+            y2 = round(random.randint(0, mat_length - self.foot_length) + self.foot_length / 2)
+            return x1, y1, x2, y2
+
+        def update_locations(x1, y1, x2, y2):
+            self.setup_grid.update_load_location(0, x1, y1)
+            self.setup_grid.update_load_location(1, x2, y2)
+
+        def generate_and_update_masses():
+            m1 = np.random.normal(35, 10)
+            m1 = 0 if m1 < 0 else m1
+            m1 = 70 if m1 > 70 else m1
+            m2 = 70 - m1
+            self.setup_grid.update_load_mass(0, m1)
+            self.setup_grid.update_load_mass(0, m2)
+        def check_overlap(x1, y1, x2, y2):
+            return abs(x2 - x1) < self.foot_width and abs(y2 - y1) < self.foot_length
+
+        if time % 30000 == 0:
+            random.seed(0)
+            np.random.seed(0)
+            self.setup_grid.update_load_mass(0, 35)
+            self.setup_grid.update_load_mass(1, 35)
+            self.setup_grid.update_load_location(0, self._left_centre_x, self._left_centre_y)
+            self.setup_grid.update_load_location(1, self._right_centre_x, self._right_centre_y)
+        elif time % 600 == 0:
+            while True:
+                x1, y1, x2, y2 = generate_positions()
+                if not check_overlap(x1, y1, x2, y2):
+                    break
+            update_locations(x1, y1, x2, y2)
+            generate_and_update_masses()
+
+        self._calculate_average_error(time / 6)
+        time += 100
+        if self._scenario_running:
+            self._scenario_update_task = self.root.after(100, self._random_foot_placement_scenario, time)
 
     def _calculate_average_error(self, time):
         if self._average_error_y is None or self._average_error_x is None:

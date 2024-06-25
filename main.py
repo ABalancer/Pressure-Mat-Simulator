@@ -589,12 +589,12 @@ class App:
         self.heat_canvas.grid(row=2, column=1, columnspan=1, pady=2, sticky=tk.N)
         self._create_heatmap_scale(GRID_WIDTH, 25, self.results_grid.colour_map)
 
-        # Row 3
         # Frame for Pressure Mat Design Configuration
         frame_configurations = create_widget(self.root, tk.Frame)
-        frame_configurations.grid(row=3, column=0, rowspan=2, columnspan=1, sticky=tk.NSEW)
+        frame_configurations.grid(row=2, column=0, rowspan=2, columnspan=1, sticky=tk.NSEW)
         frame_configurations.grid_columnconfigure((0, 1, 2), weight=1)
         frame_configurations.grid_rowconfigure(0, weight=1)
+
         frame_pressure_mat = create_widget(frame_configurations, tk.Frame)
         frame_pressure_mat.grid(row=0, column=0, sticky=tk.NSEW)
         frame_pressure_mat.grid_columnconfigure(0, weight=1)
@@ -672,12 +672,13 @@ class App:
         self.stop_scenario_button = create_widget(frame_test_scenarios, tk.Button, text="Stop Scenario",
                                                   command=self.stop_scenario).grid(row=4, columnspan=2, pady=1)
 
+        # Row 3
         # Centre of Pressure Readouts
         cop_readouts = create_widget(self.root, tk.Frame)
         cop_readouts.grid(row=3, column=1, columnspan=1, sticky="new")
         cop_readouts.grid_columnconfigure(0, weight=1)
 
-        create_widget(cop_readouts, tk.Label, text="Centre of Pressure").grid(row=0, columnspan=2, pady=5, sticky="we")
+        create_widget(cop_readouts, tk.Label, text="Centre of Pressure").grid(row=0, columnspan=2, pady=1, sticky="nwe")
         create_widget(cop_readouts, tk.Label, text="Real: ").grid(row=1, column=0, sticky="w")
         self.real_CoP_label = create_widget(cop_readouts, tk.Label, text="0", foreground="#E3242B")
         self.real_CoP_label.grid(row=1, column=1, sticky="w")
@@ -702,6 +703,7 @@ class App:
         # Test Scenarios
 
         self.root.columnconfigure((0, 1), weight=1)
+        self.root.rowconfigure((0, 1, 3), weight=1)
 
         # Starts the simulation loop
         self.root.after(20, self._simulate)

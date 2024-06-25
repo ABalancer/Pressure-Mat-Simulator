@@ -599,30 +599,30 @@ class App:
         frame_pressure_mat.grid(row=0, column=0, sticky=tk.NSEW)
         frame_pressure_mat.grid_columnconfigure(0, weight=1)
 
-        create_widget(frame_pressure_mat, tk.Label, text="Pressure Mat Design").grid(row=0, columnspan=2, pady=5,
+        create_widget(frame_pressure_mat, tk.Label, text="Pressure Mat Design").grid(row=0, columnspan=2, pady=1,
                                                                                      sticky=tk.N)
         create_widget(frame_pressure_mat, tk.Label, text="Rows:").grid(row=1, column=0, sticky=tk.W)
-        self.entry_row_number = create_widget(frame_pressure_mat, tk.Entry, width=4)
+        self.entry_row_number = create_widget(frame_pressure_mat, tk.Entry, width=3)
         self.entry_row_number.insert(0, GRID_SIZE)
-        self.entry_row_number.grid(row=1, column=1, sticky=tk.W)
+        self.entry_row_number.grid(row=1, column=1, sticky=tk.W, padx=(0, 3))
 
         create_widget(frame_pressure_mat, tk.Label, text="Columns:").grid(row=2, column=0, sticky=tk.W)
-        self.entry_col_number = create_widget(frame_pressure_mat, tk.Entry, width=4)
+        self.entry_col_number = create_widget(frame_pressure_mat, tk.Entry, width=3)
         self.entry_col_number.insert(0, GRID_SIZE)
-        self.entry_col_number.grid(row=2, column=1, sticky=tk.W)
+        self.entry_col_number.grid(row=2, column=1, sticky=tk.W, padx=(0, 3))
 
         create_widget(frame_pressure_mat, tk.Label, text="Track Width (mm):").grid(row=3, column=0, sticky=tk.W)
-        self.entry_track_width = create_widget(frame_pressure_mat, tk.Entry, width=4)
+        self.entry_track_width = create_widget(frame_pressure_mat, tk.Entry, width=3)
         self.entry_track_width.insert(0, TRACK_WIDTH)
-        self.entry_track_width.grid(row=3, column=1, sticky=tk.W)
+        self.entry_track_width.grid(row=3, column=1, sticky=tk.W, padx=(0, 3))
 
         create_widget(frame_pressure_mat, tk.Label, text="Spacing (mm):").grid(row=4, column=0, sticky=tk.W)
-        self.entry_spacing = create_widget(frame_pressure_mat, tk.Entry, width=4)
+        self.entry_spacing = create_widget(frame_pressure_mat, tk.Entry, width=3)
         self.entry_spacing.insert(0, PITCH_WIDTH)
-        self.entry_spacing.grid(row=4, column=1, sticky=tk.W)
+        self.entry_spacing.grid(row=4, column=1, sticky=tk.W, padx=(0, 3))
 
         self.update_mat_button = create_widget(frame_pressure_mat, tk.Button, text="Update Mat Design",
-                                               command=self._update_mat).grid(row=5, columnspan=2, pady=5)
+                                               command=self._update_mat).grid(row=5, columnspan=2, pady=1)
 
         # Frame for Pressure Mat load settings
         frame_load_config = create_widget(frame_configurations, tk.Frame)
@@ -630,7 +630,7 @@ class App:
         frame_load_config.grid_columnconfigure(0, weight=1)
 
         create_widget(frame_load_config, tk.Label, text="Load Configuration").grid(row=0, columnspan=2,
-                                                                                   sticky=tk.N, pady=5)
+                                                                                   sticky=tk.N, pady=1)
         '''
         create_widget(frame_load_config, tk.Label, text="Rows:").grid(row=1, column=0, sticky=tk.W)
         self.entry_resolution = tk.Entry(frame_pressure_mat, width=4)
@@ -649,28 +649,28 @@ class App:
         self.entry_spacing.grid(row=4, column=1, sticky=tk.W)
         '''
         self.update_load_button = create_widget(frame_load_config, tk.Button, text="Update Load",
-                                                command=self._update_load).grid(row=5, columnspan=2, pady=5)
+                                                command=self._update_load).grid(row=5, columnspan=2, pady=1)
         # Frame for test scenarios
         frame_test_scenarios = create_widget(frame_configurations, tk.Frame)
         frame_test_scenarios.grid(row=0, column=2, sticky=tk.NSEW)
         frame_test_scenarios.grid_columnconfigure(0, weight=1)
 
         create_widget(frame_test_scenarios, tk.Label, text="Test Scenarios").grid(row=0, columnspan=2,
-                                                                                  sticky=tk.N, pady=5)
+                                                                                  sticky=tk.N, pady=1)
         self.side_weight_shift_button = create_widget(frame_test_scenarios, tk.Button, text="Side Weight Shift",
                                                       command=lambda: self.start_scenario(
                                                           self._side_weight_shift_scenario))\
-            .grid(row=1, columnspan=2, pady=5)
+            .grid(row=1, columnspan=2, pady=1)
         self.front_weight_shift_button = create_widget(frame_test_scenarios, tk.Button, text="Front Weight Shift",
                                                        command=lambda: self.start_scenario(
                                                            self._front_weight_shift_scenario))\
-            .grid(row=2, columnspan=2, pady=5)
+            .grid(row=2, columnspan=2, pady=1)
         self.foot_slide_button = create_widget(frame_test_scenarios, tk.Button, text="Foot Sliding",
                                                command=lambda: self.start_scenario(
                                                    self._foot_slide_shift_scenario))\
-            .grid(row=3, columnspan=2, pady=5)
+            .grid(row=3, columnspan=2, pady=1)
         self.stop_scenario_button = create_widget(frame_test_scenarios, tk.Button, text="Stop Scenario",
-                                                  command=self.stop_scenario).grid(row=4, columnspan=2, pady=5)
+                                                  command=self.stop_scenario).grid(row=4, columnspan=2, pady=1)
 
         # Centre of Pressure Readouts
         cop_readouts = create_widget(self.root, tk.Frame)

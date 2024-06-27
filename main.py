@@ -1,6 +1,5 @@
 import tkinter as tk
 import numpy as np
-import random
 from scipy import constants
 from tkinter import ttk
 
@@ -562,6 +561,9 @@ class App:
         self._average_error_y_sum = 0
         self._average_error_count = 0
 
+        self._rng = None
+        self._streams = None
+
         # Row 0
         # Canvas Labels
         self.simulation_header_label = create_widget(self.root, tk.Label, text="Simulation Setup")
@@ -724,13 +726,16 @@ class App:
                                                   track_width=float(track_width), spacing_width=float(pitch_width))
             self.results_grid.update_matrix_parameters(row=int(row_number), col=int(col_number))
 
+    def _reset_random_generators(self):
+        self._rng = np.random.default_rng(0)
+        self._streams = self._rng.spawn(3)
+
     def start_scenario(self, scenario_function):
         if self._scenario_running:
             self.stop_scenario()
-        random.seed(0)
-        np.random.seed(0)
         self._scenario_running = True
         self.setup_grid.clear_loads()
+        self._reset_random_generators()
         canvas_width = self.setup_grid.canvas_width  # pixels
         canvas_height = self.setup_grid.canvas_height  # pixels
         pixel_ratio = self.setup_grid.get_pixel_ratio()
@@ -799,10 +804,10 @@ class App:
     def _random_foot_placement_scenario(self, time):
         def generate_positions():
             mat_width, mat_length = self.setup_grid.get_mat_dimensions()
-            x1 = round(random.randint(0, mat_width - self.foot_width) + self.foot_width / 2)
-            y1 = round(random.randint(0, mat_length - self.foot_length) + self.foot_length / 2)
-            x2 = round(random.randint(0, mat_width - self.foot_width) + self.foot_width / 2)
-            y2 = round(random.randint(0, mat_length - self.foot_length) + self.foot_length / 2)
+            x1 = round(self._streams[0].uniform(0, mat_width - self.foot_width) + self.foot_width / 2)
+            y1 = round(self._streams[0].uniform(0, mat_length - self.foot_length) + self.foot_length / 2)
+            x2 = round(self._streams[0].uniform(0, mat_width - self.foot_width) + self.foot_width / 2)
+            y2 = round(self._streams[0].uniform(0, mat_length - self.foot_length) + self.foot_length / 2)
             return x1, y1, x2, y2
 
         def update_locations(x1, y1, x2, y2):
@@ -810,7 +815,7 @@ class App:
             self.setup_grid.update_load_location(1, x2, y2)
 
         def generate_and_update_masses():
-            m1 = np.random.normal(35, 10)
+            m1 = self._streams[1].normal(35, 10)
             m1 = 0 if m1 < 0 else m1
             m1 = 70 if m1 > 70 else m1
             m2 = 70 - m1
@@ -820,8 +825,7 @@ class App:
             return abs(x2 - x1) < self.foot_width and abs(y2 - y1) < self.foot_length
 
         if time % 30000 == 0:
-            random.seed(0)
-            np.random.seed(0)
+            self._reset_random_generators()
             self.setup_grid.update_load_mass(0, 35)
             self.setup_grid.update_load_mass(1, 35)
             self.setup_grid.update_load_location(0, self._left_centre_x, self._left_centre_y)

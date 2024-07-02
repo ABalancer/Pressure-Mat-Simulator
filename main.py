@@ -141,20 +141,22 @@ class Sensor:
         self._r0 = r0
         self._k = k
 
-    def compute_resistance(self, pressure, loaded_area):
+    def compute_resistance(self, pressure, loaded_area, rng=None):
         if 0 < loaded_area < self._sensor_area:
             resistance_loaded = (self._r0 / loaded_area) * np.exp(-self._k * pressure)
             resistance_unloaded = (self._r0 / (self._sensor_area - loaded_area))
             resistance = 1/(1/resistance_loaded + 1/resistance_unloaded)
         else:
             resistance = (self._r0 / self._sensor_area) * np.exp(-self._k * pressure)
+        if rng is not None:
+            resistance *= rng.uniform(0.79, 1.21)
         return resistance
 
     # Through the potential divider the voltage has a somewhat linear relationship with force up to about 100kN
     # This means these ADC values are an approximation for force and are not always accurate. This is the default.
     # If approximate=False, then the correct force values will be mapped to the 12bit ADC output.
-    def compute_adc_value(self, pressure, loaded_area=None, approximate=True):
-        z1 = self.compute_resistance(pressure, loaded_area)
+    def compute_adc_value(self, pressure, loaded_area=None, approximate=True, rng=None):
+        z1 = self.compute_resistance(pressure, loaded_area, rng)
         if approximate:  # uses the potential divider to estimate the force rather than the equation.
             z2 = self._pdr
             voltage = z2 / (z1 + z2)
@@ -251,7 +253,7 @@ class SimulationSetup:
         self._loads.append(load)
 
     # Checks if the loads and sensors overlap. If they do, computes and returns the pressure reading.
-    def _get_sensor_pressure(self, sensor, load, approximate):
+    def _get_sensor_pressure(self, sensor, load, approximate, rng=None):
         # Get the coordinates of the rectangles
         sensor_coordinates = self.canvas.coords(sensor.get_reference())
         load_coordinates = self.canvas.coords(load.get_reference())
@@ -273,11 +275,11 @@ class SimulationSetup:
             pixel_overlap_area = 0
             pressure = 0
         real_overlap_area = pixel_overlap_area/((self._pixel_ratio * 1000) ** 2)
-        adc_result = sensor.compute_adc_value(pressure, real_overlap_area, approximate=approximate)
+        adc_result = sensor.compute_adc_value(pressure, real_overlap_area, approximate=approximate, rng=rng)
 
         return adc_result
 
-    def check_sensors(self, approximate=True):
+    def check_sensors(self, approximate=True, rng=None):
         matrix_adc_results = np.zeros((self._num_rows, self._num_columns), dtype=np.int16)
         adc_results = np.zeros(len(self._loads), dtype=np.int16)
         no_load = self._sensors[0].compute_adc_value(0, loaded_area=0, approximate=approximate)
@@ -290,7 +292,8 @@ class SimulationSetup:
                 for load_number in range(0, len(self._loads)):
                     adc_results[load_number] = self._get_sensor_pressure(self._sensors[sensor],
                                                                          self._loads[load_number],
-                                                                         approximate=approximate)
+                                                                         approximate=approximate,
+                                                                         rng=rng)
                 sensor += 1
                 if adc_results.any():
                     rescaled_adc_result = max(adc_results) - no_load
@@ -563,6 +566,7 @@ class App:
 
         self._rng = None
         self._streams = None
+        self._reset_random_generators()
 
         # Row 0
         # Canvas Labels
@@ -804,10 +808,10 @@ class App:
     def _random_foot_placement_scenario(self, time):
         def generate_positions():
             mat_width, mat_length = self.setup_grid.get_mat_dimensions()
-            x1 = round(self._streams[0].uniform(0, mat_width - self.foot_width) + self.foot_width / 2)
-            y1 = round(self._streams[0].uniform(0, mat_length - self.foot_length) + self.foot_length / 2)
-            x2 = round(self._streams[0].uniform(0, mat_width - self.foot_width) + self.foot_width / 2)
-            y2 = round(self._streams[0].uniform(0, mat_length - self.foot_length) + self.foot_length / 2)
+            x1 = round(self._streams[1].uniform(0, mat_width - self.foot_width) + self.foot_width / 2)
+            y1 = round(self._streams[1].uniform(0, mat_length - self.foot_length) + self.foot_length / 2)
+            x2 = round(self._streams[1].uniform(0, mat_width - self.foot_width) + self.foot_width / 2)
+            y2 = round(self._streams[1].uniform(0, mat_length - self.foot_length) + self.foot_length / 2)
             return x1, y1, x2, y2
 
         def update_locations(x1, y1, x2, y2):
@@ -815,7 +819,7 @@ class App:
             self.setup_grid.update_load_location(1, x2, y2)
 
         def generate_and_update_masses():
-            m1 = self._streams[1].normal(35, 10)
+            m1 = self._streams[2].normal(35, 10)
             m1 = 0 if m1 < 0 else m1
             m1 = 70 if m1 > 70 else m1
             m2 = 70 - m1
@@ -869,7 +873,7 @@ class App:
 
     # Recursive function that acts as an infinite loop, constantly checking and updating the grids.
     def _simulate(self):
-        matrix = self.setup_grid.check_sensors(approximate=APPROXIMATE_FORCE)
+        matrix = self.setup_grid.check_sensors(approximate=APPROXIMATE_FORCE, rng=self._streams[0])
         self._update_heatmap(matrix)
         self.root.after(20, self._simulate)
 

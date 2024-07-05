@@ -126,12 +126,14 @@ class Load:
 
 
 class Sensor:
-    def __init__(self, reference, sensor_area, r0, k, rd):
+    def __init__(self, reference, sensor_area, r0, k, rd, rng=None):
         self._reference = reference
         self._sensor_area = sensor_area
         self._r0 = r0
         self._pdr = rd / self._sensor_area
         self._k = k
+        if rng is not None:
+            self._r0 *= rng.uniform(0.79, 1.21)
 
     def get_reference(self):
         return self._reference
@@ -142,22 +144,20 @@ class Sensor:
         self._r0 = r0
         self._k = k
 
-    def compute_resistance(self, pressure, loaded_area, rng=None):
+    def compute_resistance(self, pressure, loaded_area):
         if 0 < loaded_area < self._sensor_area:
             resistance_loaded = (self._r0 / loaded_area) * np.exp(-self._k * pressure)
             resistance_unloaded = (self._r0 / (self._sensor_area - loaded_area))
             resistance = 1/(1/resistance_loaded + 1/resistance_unloaded)
         else:
             resistance = (self._r0 / self._sensor_area) * np.exp(-self._k * pressure)
-        if rng is not None:
-            resistance *= rng.uniform(0.79, 1.21)
         return resistance
 
     # Through the potential divider the voltage has a somewhat linear relationship with force up to about 100kN
     # This means these ADC values are an approximation for force and are not always accurate. This is the default.
     # If approximate=False, then the correct force values will be mapped to the 12bit ADC output.
-    def compute_adc_value(self, pressure, loaded_area=None, approximate=True, rng=None):
-        z1 = self.compute_resistance(pressure, loaded_area, rng)
+    def compute_adc_value(self, pressure, loaded_area=None, approximate=True):
+        z1 = self.compute_resistance(pressure, loaded_area)
         if approximate:  # uses the potential divider to estimate the force rather than the equation.
             z2 = self._pdr
             voltage = z2 / (z1 + z2)
@@ -172,7 +172,7 @@ class Sensor:
 
 # Draws the left grid and the configurable loads for creating a simulation
 class SimulationSetup:
-    def __init__(self, canvas, rows, columns):
+    def __init__(self, canvas, rows, columns, rng=None):
         self.canvas = canvas
         self.canvas_width = canvas.winfo_reqwidth()
         self.canvas_height = canvas.winfo_reqheight()
@@ -193,6 +193,7 @@ class SimulationSetup:
         # Multiply real width by pixel ratio to get a pixel width.
         # Divide a pixel width by pixel ratio to get a real width
         self._sensor_area = 0
+        self._rng=rng
         self.update_mat_parameters(self._num_rows, self._num_columns, self._track_width_mm, self._pitch_width_mm)
 
     def update_mat_parameters(self, rows, cols, track_width, spacing_width):
@@ -230,7 +231,8 @@ class SimulationSetup:
                                                                 y + self._track_width_pixel,
                                                                 fill='black', outline='', tags='pressure_sensor')
                 current_sensor = Sensor(sensor_reference,
-                                        sensor_area=self._sensor_area, r0=R0, k=K, rd=RD)
+                                        sensor_area=self._sensor_area, r0=R0, k=K, rd=RD,
+                                        rng=self._rng)
                 self._sensors.append(current_sensor)
                 x += self._track_width_pixel + self._spacing_width_pixel
             x = self._spacing_width_pixel / 2
@@ -254,7 +256,7 @@ class SimulationSetup:
         self._loads.append(load)
 
     # Checks if the loads and sensors overlap. If they do, computes and returns the pressure reading.
-    def _get_sensor_pressure(self, sensor, load, approximate, rng=None):
+    def _get_sensor_pressure(self, sensor, load, approximate):
         # Get the coordinates of the rectangles
         sensor_coordinates = self.canvas.coords(sensor.get_reference())
         load_coordinates = self.canvas.coords(load.get_reference())
@@ -276,11 +278,11 @@ class SimulationSetup:
             pixel_overlap_area = 0
             pressure = 0
         real_overlap_area = pixel_overlap_area/((self._pixel_ratio * 1000) ** 2)
-        adc_result = sensor.compute_adc_value(pressure, real_overlap_area, approximate=approximate, rng=rng)
+        adc_result = sensor.compute_adc_value(pressure, real_overlap_area, approximate=approximate)
 
         return adc_result
 
-    def check_sensors(self, approximate=True, rng=None):
+    def check_sensors(self, approximate=True):
         matrix_adc_results = np.zeros((self._num_rows, self._num_columns), dtype=np.int16)
         adc_results = np.zeros(len(self._loads), dtype=np.int16)
         no_load = self._sensors[0].compute_adc_value(0, loaded_area=0, approximate=approximate)
@@ -293,8 +295,7 @@ class SimulationSetup:
                 for load_number in range(0, len(self._loads)):
                     adc_results[load_number] = self._get_sensor_pressure(self._sensors[sensor],
                                                                          self._loads[load_number],
-                                                                         approximate=approximate,
-                                                                         rng=rng)
+                                                                         approximate=approximate)
                 sensor += 1
                 if adc_results.any():
                     rescaled_adc_result = max(adc_results) - no_load
@@ -581,7 +582,8 @@ class App:
         self.simulation_canvas = create_widget(self.root, tk.Canvas, width=GRID_WIDTH, height=GRID_LENGTH,
                                                borderwidth=0)
         self.simulation_canvas.grid(row=1, column=0, columnspan=1)
-        self.setup_grid = SimulationSetup(self.simulation_canvas, rows=GRID_SIZE, columns=GRID_SIZE)
+        self.setup_grid = SimulationSetup(self.simulation_canvas, rows=GRID_SIZE, columns=GRID_SIZE,
+                                          rng=self._streams[0])
 
         # Canvas result grid
         self.result_canvas = create_widget(self.root, tk.Canvas, width=GRID_WIDTH, height=GRID_LENGTH, borderwidth=0)
@@ -874,7 +876,7 @@ class App:
 
     # Recursive function that acts as an infinite loop, constantly checking and updating the grids.
     def _simulate(self):
-        matrix = self.setup_grid.check_sensors(approximate=APPROXIMATE_FORCE, rng=self._streams[0])
+        matrix = self.setup_grid.check_sensors(approximate=APPROXIMATE_FORCE)
         self._update_heatmap(matrix)
         self.root.after(20, self._simulate)
 

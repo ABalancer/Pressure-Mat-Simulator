@@ -20,8 +20,9 @@ GRID_WIDTH = 500
 TRACK_WIDTH = 15
 PITCH_WIDTH = 15
 
-R0 = 9.1618  # 0.91618
-K = 1.356e-5
+R0 = 0.2325 # 9.1618  # 0.91618
+K = 2.225e-5 #1.356e-5
+RD = 0.275
 
 APPROXIMATE_FORCE = True
 
@@ -125,11 +126,11 @@ class Load:
 
 
 class Sensor:
-    def __init__(self, reference, sensor_area, r0, k):
+    def __init__(self, reference, sensor_area, r0, k, rd):
         self._reference = reference
         self._sensor_area = sensor_area
         self._r0 = r0
-        self._pdr = self._r0 / self._sensor_area
+        self._pdr = rd / self._sensor_area
         self._k = k
 
     def get_reference(self):
@@ -229,7 +230,7 @@ class SimulationSetup:
                                                                 y + self._track_width_pixel,
                                                                 fill='black', outline='', tags='pressure_sensor')
                 current_sensor = Sensor(sensor_reference,
-                                        sensor_area=self._sensor_area, r0=R0, k=K)
+                                        sensor_area=self._sensor_area, r0=R0, k=K, rd=RD)
                 self._sensors.append(current_sensor)
                 x += self._track_width_pixel + self._spacing_width_pixel
             x = self._spacing_width_pixel / 2

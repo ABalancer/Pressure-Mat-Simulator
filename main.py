@@ -134,6 +134,10 @@ class Sensor:
         self._k = k
         if rng is not None:
             self._r0 *= rng.uniform(0.79, 1.21)
+        self._no_load = self.compute_adc_value(0, self._sensor_area)
+
+    def get_reading_at_no_load(self):
+        return self._no_load
 
     def get_reference(self):
         return self._reference
@@ -163,7 +167,7 @@ class Sensor:
             voltage = z2 / (z1 + z2)
             adc_value = round(4095 * voltage)
         else:  # returns the real value of the force using the equation.
-            force = np.log(z1/(self._r0 / self._sensor_area))/-self._k
+            force = np.log(z1/(self._r0 / self._sensor_area)) / -self._k
             if force > 200000:
                 force = 200000
             adc_value = round(4095 * force / 200000)
@@ -177,6 +181,11 @@ class SimulationSetup:
         self.canvas_width = canvas.winfo_reqwidth()
         self.canvas_height = canvas.winfo_reqheight()
 
+        self._r0 = R0
+        self._k = K
+        self._rd = RD
+        mid_point = round(4095 * (self._rd / (self._r0 + self._rd)))  # calculate the midpoint and discretise it
+        self._scaling_factor = 4095/(4095 - mid_point)
         # Default parameters
         self._sensors = []
         self._loads = []
@@ -285,8 +294,6 @@ class SimulationSetup:
     def check_sensors(self, approximate=True):
         matrix_adc_results = np.zeros((self._num_rows, self._num_columns), dtype=np.int16)
         adc_results = np.zeros(len(self._loads), dtype=np.int16)
-        no_load = self._sensors[0].compute_adc_value(0, loaded_area=0, approximate=approximate)
-        scaling_factor = 4095/(4095 - no_load)
         if matrix_adc_results.size != len(self._sensors):
             exit("Mismatch between number of sensors and matrix size")
         sensor = 0
@@ -296,14 +303,17 @@ class SimulationSetup:
                     adc_results[load_number] = self._get_sensor_pressure(self._sensors[sensor],
                                                                          self._loads[load_number],
                                                                          approximate=approximate)
+                    adc_results[load_number] -= self._sensors[sensor].get_reading_at_no_load()
                 sensor += 1
                 if adc_results.any():
-                    rescaled_adc_result = max(adc_results) - no_load
+                    rescaled_adc_result = max(adc_results)
                 else:
                     rescaled_adc_result = 0
                 if rescaled_adc_result < 0:
                     rescaled_adc_result = 0
-                matrix_adc_results[row][col] = scaling_factor * rescaled_adc_result
+                elif rescaled_adc_result > 4095:
+                    rescaled_adc_result = 4095
+                matrix_adc_results[row][col] = self._scaling_factor * rescaled_adc_result
         return matrix_adc_results
 
     def get_loads(self):
